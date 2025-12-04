@@ -1,0 +1,49 @@
+name: Build Charts
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}  # <owner>/<repo>
+  ACTOR: ${{ github.actor }}
+  REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write   # needed for GHCR push
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      
+      - name: Full Image Name
+        run: |
+          tag=dev
+          if [[ ${{ github.ref }} == 'refs/heads/main' ]]; then
+            tag=latest
+          fi
+          full_image=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag" | tr '[:upper:]' '[:lower:]')
+          echo "FULL_IMAGE=$full_image"
+          echo "FULL_IMAGE=$full_image" >> $GITHUB_ENV
+
+      - name: Build Image
+        run: |
+          docker build -t ${{ env.FULL_IMAGE }} .
+
+      - name: Log in to OCI registry
+        if: github.event_name == 'push'
+        run: echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" --username "$ACTOR" --password-stdin
+      
+      - name: Push Image
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ env.FULL_IMAGE }}
